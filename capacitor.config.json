@@ -1,0 +1,11 @@
+{
+  "appId": "com.khazzouna.game",
+  "appName": "خزونة",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": true
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}
