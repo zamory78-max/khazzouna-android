@@ -190,7 +190,10 @@ const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const pick=a=>a[Math.floor(Math.random()*a.length)];
 
 /* ============ Game state ============ */
-const G={mode:'loading',players:[null,null],objs:[null,null],hider:0,round:1,score:[0,0],duration:90,hints:true,sound:true,hide:null,night:false};
+const G={mode:'loading',players:[null,null],objs:[null,null],hider:0,round:1,score:[0,0],duration:90,hints:true,sound:true,hide:null,night:false,area:'yard'};
+const AREAS=[['yard','البيت والحديقة'],['forest','الغابة']];
+const spotsIn=a=>SPOTS.filter(s=>(s.area||'yard')===a);
+const spawnPoint=a=>a==='forest'?{x:0,z:-26,ry:0}:{x:-3.5,z:13.5,ry:Math.PI};
 
 /* ============ Sound ============ */
 let actx=null;
@@ -286,7 +289,7 @@ function buildWorld(){
   // path stones gate -> door
   for(let i=0;i<9;i++){const s=new THREE.Mesh(new THREE.CylinderGeometry(.55,.55,.05,10),M('#d8c49a'));s.position.set(-3.5+Math.sin(i*.7)*.6*(i/8),.03,14-i*2.1);s.receiveShadow=true;world.add(s);}
   // fence
-  const FX=18,FZ1=-20,FZ2=16,fc='#efdcb5';
+  const FX=18,FZ1=-68,FZ2=16,fc='#efdcb5';
   const fence=(x1,z1,x2,z2)=>{const horiz=z1===z2,L=horiz?Math.abs(x2-x1):Math.abs(z2-z1),n=Math.round(L/1.5);
     for(let i=0;i<=n;i++){const t=i/n,x=x1+(x2-x1)*t,z=z1+(z2-z1)*t;box(.18,1.2,.18,fc,x,.6,z,{cast:false});}
     [.45,.95].forEach(y=>horiz?box(L,.12,.08,fc,(x1+x2)/2,y,z1,{cast:false}):box(.08,.12,L,fc,x1,y,(z1+z2)/2,{cast:false}));
@@ -363,6 +366,7 @@ function buildWorld(){
   for(let i=0;i<40;i++){const x=-16+Math.random()*32,z=-18+Math.random()*32;if(x>-8&&x<8&&z>-15&&z<-3)continue;
     ball(.1,pick(['#ff8aa6','#ffe27a','#ffffff','#b48cf2']),x,.12,z);}
   buildExtras();
+  buildForest();
   // spot rings
   SPOTS.forEach(s=>{const r=new THREE.Mesh(new THREE.RingGeometry(.55,.7,40),new THREE.MeshBasicMaterial({color:C('#ffffff'),transparent:true,opacity:.6,depthWrite:false}));
     r.rotation.x=-Math.PI/2;r.position.set(s.x,.06,s.z);world.add(r);s.ring=r;});
@@ -401,6 +405,72 @@ function buildExtras(){
   box(.8,.9,.7,'#f2f2f2',1.0,.45,-9.6,{coll:true,m:{roughness:.3}});const dr=cyl(.25,.25,.04,'#9fd3f0',1.0,.5,-9.24,18);dr.rotation.x=Math.PI/2;
   const door=box(.08,2.2,1.9,'#9b6a43',-4.55,1.1,-5.0,{cast:true});                                 // open front door
 }
+function buildForest(){
+  const X1=-17,X2=17,Z1=-66,Z2=-21,dummy=new THREE.Object3D();
+  // forest floor
+  const floor=new THREE.Mesh(new THREE.PlaneGeometry(X2-X1,Z2-Z1),M('#4f6b35'));
+  floor.rotation.x=-Math.PI/2;floor.position.set((X1+X2)/2,.008,(Z1+Z2)/2);floor.receiveShadow=true;world.add(floor);
+  // dirt path from the garden into the trees
+  for(let i=0;i<10;i++)box(2.3,.02,1.8,'#c9a96a',Math.sin(i*.6)*.9,.015,-19.5-i*2.2,{cast:false});
+  // leaf-litter patches for color variation (cheap flat discs)
+  const litCols=['#5c7a3e','#3f5a2a','#6b8a4a','#46602f'];
+  const litGeo=new THREE.CircleGeometry(1,7);
+  const litMat=new THREE.MeshStandardMaterial({roughness:1});
+  const litN=60,litter=new THREE.InstancedMesh(litGeo,litMat,litN);litter.receiveShadow=true;
+  for(let i=0;i<litN;i++){const x=X1+1+Math.random()*(X2-X1-2),z=Z1+1+Math.random()*(Z2-Z1-2),s=1.1+Math.random()*2.1;
+    dummy.position.set(x,.012,z);dummy.rotation.set(-Math.PI/2,0,Math.random()*Math.PI*2);dummy.scale.set(s,s,s);dummy.updateMatrix();
+    litter.setMatrixAt(i,dummy.matrix);litter.setColorAt(i,C(pick(litCols)));}
+  litter.instanceColor.needsUpdate=true;world.add(litter);
+  // feature hiding-spot props (real geometry, with collision)
+  const feats=spotsIn('forest');
+  const F=id=>feats.find(s=>s.id===id);
+  (()=>{const s=F('f_trunk');cyl(.55,.75,5.2,'#5a4330',s.x,2.6,s.z,9);
+    [[0,4.9,0,1.9],[.7,4.3,.4,1.4],[-.6,4.4,-.3,1.5]].forEach(([dx,y,dz,r])=>ball(r,pick(['#3f7a3f','#386b38','#4f8a4a']),s.x+dx,y,s.z+dz));
+    addColl(s.x,s.z,1.3,1.3);})();
+  (()=>{const s=F('f_log');const l=cyl(.7,.7,3.4,'#6b4e35',s.x,.7,s.z,12,{cast:true});l.rotation.z=Math.PI/2;
+    const hole=cyl(.42,.42,.3,'#2a1c12',s.x-1.65,.7,s.z,12,{cast:false});hole.rotation.z=Math.PI/2;
+    addColl(s.x,s.z,3.6,1.5);})();
+  (()=>{const s=F('f_bush');[[0,0,0,1.5],[1,.3,.6,1.1],[-.9,.2,-.5,1.2],[.3,-.8,.9,1.0],[-.6,-.7,-.8,1.0]].forEach(([dx,dy,dz,r])=>
+    ball(r,pick(['#3a854a','#459150','#357a40']),s.x+dx,r*.8,s.z+dz));addColl(s.x,s.z,2.6,2.6);})();
+  (()=>{const s=F('f_rock');[[0,0,0,1.3],[.9,.1,.7,.8],[-.8,0,-.6,.9]].forEach(([dx,dy,dz,r])=>{
+    const m=new THREE.Mesh(new THREE.IcosahedronGeometry(r,0),M('#8a8a84',{flatShading:true}));m.position.set(s.x+dx,r*.7,s.z+dz);m.castShadow=true;m.receiveShadow=true;world.add(m);});
+    addColl(s.x,s.z,2.4,2.2);})();
+  (()=>{const s=F('f_fallen');const l=cyl(.4,.5,4.4,'#5a4330',s.x,.42,s.z,10,{cast:true});l.rotation.z=Math.PI/2-.12;l.rotation.x=.1;
+    [[-1.2,.3],[.8,-.4],[1.6,.2]].forEach(([dx,dz])=>ball(.35,'#3f7a3f',s.x+dx,.65,s.z+dz));
+    addColl(s.x,s.z,3.2,1.6);})();
+  (()=>{const s=F('f_stump');cyl(.75,.85,.9,'#6b4e35',s.x,.45,s.z,10);cyl(.7,.7,.06,'#c9a96a',s.x,.91,s.z,10,{cast:false});
+    ball(.18,'#d8502f',s.x+.6,.3,s.z+.5);ball(.14,'#d8502f',s.x+.7,.25,s.z-.3);addColl(s.x,s.z,1.6,1.6);})();
+  // background trees - instanced for performance (trunk + 2 canopy lobes each)
+  const TN=42,barkCols=['#5a4330','#4a3526','#6b4e35'],leafCols=['#3f7a3f','#4f8a4a','#386b38','#5a9152'];
+  const trunkGeo=new THREE.CylinderGeometry(.16,.26,3,7),trunkMat=new THREE.MeshStandardMaterial({roughness:1});
+  const trunks=new THREE.InstancedMesh(trunkGeo,trunkMat,TN);trunks.castShadow=true;
+  const canGeo=new THREE.IcosahedronGeometry(1,0),canMat=new THREE.MeshStandardMaterial({roughness:.95,flatShading:true});
+  const canopy=new THREE.InstancedMesh(canGeo,canMat,TN*2);canopy.castShadow=true;
+  const placed=[];const tooClose=(x,z,min)=>placed.some(p=>Math.hypot(p.x-x,p.z-z)<min)||feats.some(f=>Math.hypot(f.x-x,f.z-z)<2.8);
+  let ci=0;
+  for(let i=0;i<TN;i++){let x,z,tries=0;
+    do{x=X1+1.3+Math.random()*(X2-X1-2.6);z=Z1+1.6+Math.random()*(Z2-Z1-3.2);tries++;}while(tooClose(x,z,2.4)&&tries<20);
+    placed.push({x,z});
+    const h=2.4+Math.random()*1.7,sc=h/3;
+    dummy.position.set(x,h/2,z);dummy.rotation.set(0,Math.random()*Math.PI*2,0);dummy.scale.set(sc,sc,sc);dummy.updateMatrix();
+    trunks.setMatrixAt(i,dummy.matrix);trunks.setColorAt(i,C(pick(barkCols)));
+    for(let l=0;l<2;l++){const r=1.0+Math.random()*.9-l*.2,oy=h+.7-l*.65;
+      dummy.position.set(x+(Math.random()-.5)*.6,oy,z+(Math.random()-.5)*.6);
+      dummy.rotation.set(Math.random()*.4,Math.random()*Math.PI*2,Math.random()*.4);dummy.scale.set(r,r,r);dummy.updateMatrix();
+      canopy.setMatrixAt(ci,dummy.matrix);canopy.setColorAt(ci,C(pick(leafCols)));ci++;}}
+  trunks.instanceColor.needsUpdate=trunks.instanceMatrix.needsUpdate=true;
+  canopy.instanceColor.needsUpdate=canopy.instanceMatrix.needsUpdate=true;
+  world.add(trunks);world.add(canopy);
+  // grass tufts - cheap standing planes, instanced
+  const bladeGeo=new THREE.PlaneGeometry(.5,.55);bladeGeo.translate(0,.275,0);
+  const bladeMat=new THREE.MeshStandardMaterial({roughness:1,side:THREE.DoubleSide});
+  const GN=420,blades=new THREE.InstancedMesh(bladeGeo,bladeMat,GN);
+  const grassCols=['#5a9152','#4f8a48','#6aa15c','#437a3e'];
+  for(let i=0;i<GN;i++){const x=X1+.6+Math.random()*(X2-X1-1.2),z=Z1+.6+Math.random()*(Z2-Z1-1.2);
+    const s=.7+Math.random()*.8;dummy.position.set(x,0,z);dummy.rotation.set(0,Math.random()*Math.PI*2,0);dummy.scale.set(s,s,s);dummy.updateMatrix();
+    blades.setMatrixAt(i,dummy.matrix);blades.setColorAt(i,C(pick(grassCols)));}
+  blades.instanceColor.needsUpdate=blades.instanceMatrix.needsUpdate=true;world.add(blades);
+}
 const SPOTS=[
   {id:'tree',label:'خلف الشجرة',x:-11,z:6.3,r:2.1},
   {id:'shed',label:'داخل الكوخ',x:10.9,z:-15,r:2.0},
@@ -430,9 +500,15 @@ const SPOTS=[
   {id:'tv',label:'خلف التلفاز',x:-1.4,z:-7.95,r:1.1},
   {id:'door',label:'خلف الباب',x:-5.2,z:-4.75,r:1.1},
   {id:'ktable',label:'تحت طاولة المطبخ',x:3.3,z:-5.35,r:1.15},
+  {id:'f_trunk',label:'خلف الشجرة الكبيرة',x:-10,z:-30,r:2.1,area:'forest'},
+  {id:'f_log',label:'داخل الجذع المجوّف',x:7,z:-35,r:1.9,area:'forest'},
+  {id:'f_bush',label:'داخل الأدغال',x:-7,z:-44,r:2.1,area:'forest'},
+  {id:'f_rock',label:'خلف الصخرة',x:9,z:-49,r:2.0,area:'forest'},
+  {id:'f_fallen',label:'خلف الشجرة الساقطة',x:-3,z:-57,r:1.9,area:'forest'},
+  {id:'f_stump',label:'خلف الجذع القديم',x:11,z:-62,r:1.8,area:'forest'},
 ];
 const inHouse=(x,z)=>x>HOUSE.x1&&x<HOUSE.x2&&z>HOUSE.z1&&z<HOUSE.z2;
-const areaName=s=>inHouse(s.x,s.z)?'البيت':'الحديقة';
+const areaName=s=>s.area==='forest'?'الغابة':(inHouse(s.x,s.z)?'البيت':'الحديقة');
 
 /* ============ Characters ============ */
 const MODELS={
@@ -442,8 +518,8 @@ const MODELS={
 };
 const GLB={};let XCLIPS=null;
 const COLORS=['#ffffff','#ff7d6b','#ffc247','#7ccf8a','#5aa9e6','#b48cf2'];
-const DRESS=['#2f3e5c','#5b2f4f','#3d5a40','#6e4630','#26262c','#9a5c6e'];
-const HIJAB=['#efe6d6','#ffffff','#e4b8c0','#9fb3d1','#3b3b45','#c9a26b'];
+const DRESS=['#1f3a5c','#1f4d3e','#7a2338','#6b4226','#2a2a33','#6e3a5c','#8a6d2e','#2f6b63','#b4584a','#4a3a63'];
+const HIJAB=['#f7ecd9','#ffffff','#f0c7cd','#b9cde0','#2e2e38','#e3cf9e','#d3c2e6','#9fbf9f','#f2a7b0','#c9d9e8'];
 /* Dress the girl model once: a robe over body/arms/legs and a hijab over head, neck and shoulders, face and hands left as they are.
    Hair that sticks out is pulled onto a rounded head cover and the neck is widened into a drape. */
 function prepGirl(){
@@ -452,7 +528,7 @@ function prepGirl(){
   const hp=by('Head').getWorldPosition(new V()),tp=(by('HeadTop_End')||by('Head')).getWorldPosition(new V()),np=by('Neck').getWorldPosition(new V());
   const lsh=by('LeftShoulder')||by('LeftArm'),rsh=by('RightShoulder')||by('RightArm');
   const lshW=lsh?lsh.getWorldPosition(new V()):null,rshW=rsh?rsh.getWorldPosition(new V()):null;
-  const hh=Math.max(.15,tp.y-hp.y),R=hh*.6,c=new V(hp.x,hp.y+hh*.48,hp.z+hh*.02);
+  const hh=Math.max(.15,tp.y-hp.y),R=hh*.57,c=new V(hp.x,hp.y+hh*.46,hp.z+hh*.02);
   // How far the drape should flare and drop to just graze the shoulders, from the real shoulder bones.
   const shoulderW=lshW&&rshW?Math.max(R*1.12,Math.hypot(lshW.x-rshW.x,lshW.z-rshW.z)/2+R*.2):R*1.18;
   const shoulderY=lshW&&rshW?(lshW.y+rshW.y)/2:np.y-R*.3;
@@ -468,7 +544,7 @@ function prepGirl(){
     // Loose hair sometimes binds to the spine instead of the neck; catch that too, but only close
     // beside the head/neck column, never out along the shoulders and arms.
     const looseHair=/Spine2$|Spine1$/.test(nm)&&v.y>np.y-R*.3&&Math.abs(v.x-c.x)<R*1.1&&Math.abs(v.z-c.z)<R*1.3;
-    const face=head&&v.z>c.z+R*.3&&v.y<c.y+R*.42&&v.y>hp.y-R*.22&&Math.abs(v.x-c.x)<R*.58;
+    const face=head&&v.z>c.z+R*.22&&v.y<c.y+R*.44&&v.y>hp.y-R*.26&&Math.abs(v.x-c.x)<R*.66;
     let d=0,h=0;
     if(hand||foot||face){}
     else if(head||neck||looseHair){h=1;
@@ -647,7 +723,7 @@ function collide(x,z,r){
   for(let it=0;it<2;it++)for(const b of COLL){const cx=clamp(x,b.x1,b.x2),cz=clamp(z,b.z1,b.z2);const dx=x-cx,dz=z-cz,d2=dx*dx+dz*dz;
     if(d2<r*r){if(d2>1e-8){const d=Math.sqrt(d2);x=cx+dx/d*r;z=cz+dz/d*r;}
       else{const pl=[x-b.x1,b.x2-x,z-b.z1,b.z2-z],m=Math.min(...pl);if(m===pl[0])x=b.x1-r;else if(m===pl[1])x=b.x2+r;else if(m===pl[2])z=b.z1-r;else z=b.z2+r;}}}
-  return [clamp(x,-17.6,17.6),clamp(z,-19.6,15.6)];
+  return [clamp(x,-17.6,17.6),clamp(z,-67.6,15.6)];
 }
 const angLerp=(a,b,t)=>{let d=((b-a+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;return a+d*t;};
 
@@ -699,6 +775,7 @@ function menu(){
     <div class="center" style="justify-content:flex-start;padding-top:4vh">
       <div class="logo">خزونة</div><p class="sub">واحد يتخبّى في البيت أو الحديقة، والآخر يدخل ويدوّر عليه قبل ما يخلص الوقت.</p></div>
     <div class="card">
+      <div class="setting"><span>مكان الاختباء</span><div class="seg" data-group="area">${AREAS.map(([v,l])=>`<button class="${G.area===v?'on':''}" data-val="${v}">${l}</button>`).join('')}</div></div>
       <div class="setting"><span>مدة البحث</span><div class="seg" data-group="duration">${[60,90,120,180].map(d=>`<button class="${G.duration===d?'on':''}" data-val="${d}">${d} ث</button>`).join('')}</div></div>
       <div class="setting"><span>الوقت</span><div class="seg" data-group="night"><button class="${!G.night?'on':''}" data-val="0">نهار</button><button class="${G.night?'on':''}" data-val="1">ليل بالمصباح</button></div></div>
       <div class="setting"><span>تلميحات «سخون / بارد»</span><div class="seg" data-group="hints"><button class="${G.hints?'on':''}" data-val="1">نعم</button><button class="${!G.hints?'on':''}" data-val="0">لا</button></div></div>
@@ -711,6 +788,7 @@ function menu(){
       <p class="eyebrow">المختبئ يضحك كل فترة فاسمع من أي جهة، والقلب يدقّ أسرع كلما اقتربت. وعندك رادار واحد في كل جولة.</p></div>
   </div></div>`;
   ui.onclick=e=>{const b=e.target.closest('button');if(!b)return;const g=b.parentElement.dataset.group;
+    if(g==='area'){G.area=b.dataset.val;menu();return;}
     if(g==='duration'){G.duration=+b.dataset.val;menu();return;}
     if(g==='hints'){G.hints=b.dataset.val==='1';menu();return;}
     if(g==='night'){G.night=b.dataset.val==='1';applyTime();menu();return;}
@@ -764,8 +842,8 @@ function creator(i,done,draft){
       G.players[i]={...c};if(G.preview){removeCharFrom(studio,G.preview);G.preview=null;}sound([523,784]);done();}};
 }
 
-function spawn(i){const o=makeChar(G.players[i]);o.root.position.set(-3.5,0,13.5);o.root.rotation.y=Math.PI;addCharTo(world,o);G.objs[i]=o;return o;}
-function nearestSpot(p,skip){let best=null,bd=1e9;SPOTS.forEach(s=>{const d=Math.hypot(p.x-s.x,p.z-s.z);if(d<s.r&&d<bd){bd=d;best=s;}});return best;}
+function spawn(i){const o=makeChar(G.players[i]);const sp=spawnPoint(G.area);o.root.position.set(sp.x,0,sp.z);o.root.rotation.y=sp.ry;addCharTo(world,o);G.objs[i]=o;return o;}
+function nearestSpot(p,skip){let best=null,bd=1e9;spotsIn(G.area).forEach(s=>{const d=Math.hypot(p.x-s.x,p.z-s.z);if(d<s.r&&d<bd){bd=d;best=s;}});return best;}
 
 function showToast(t,cls='',ms=2200){const el=$('toast');el.className='toast '+cls;el.textContent=t;el.hidden=false;clearTimeout(showToast.t);if(ms)showToast.t=setTimeout(()=>el.hidden=true,ms);}
 
@@ -773,7 +851,7 @@ function showToast(t,cls='',ms=2200){const el=$('toast');el.className='toast '+c
 function startHide(){
   clearWorldChars();ui.innerHTML='';ui.onclick=null;
   const o=spawn(G.hider);G.active=o;G.mode='hide';G.lock=false;cam.yaw=0;cam.pitchAdj=0;cam.target.copy(o.root.position);
-  SPOTS.forEach(s=>{s.ring.visible=true;s.ring.material.color=C('#ffc247');s.ring.material.opacity=.75;});
+  spotsIn(G.area).forEach(s=>{s.ring.visible=true;s.ring.material.color=C('#ffc247');s.ring.material.opacity=.75;});
   setHud(true);$('timerBox').hidden=false;$('triesBox').hidden=true;$('radarBtn').hidden=true;
   G.hideTotal=45000;G.hideEnd=performance.now()+G.hideTotal;G.lastSec=null;
   $('roleline').innerHTML=`<span class="tag hider">${esc(G.players[G.hider].name)} ${vb(G.hider,'يبحث','تبحث')} عن خزونة</span>`;
@@ -804,7 +882,7 @@ function readySearch(){
   const k=1-G.hider;clearWorldChars();
   const hid=makeChar(G.players[G.hider]);hid.root.visible=false;addCharTo(world,hid);G.objs[G.hider]=hid;
   const o=spawn(k);G.active=o;cam.yaw=0;cam.pitchAdj=0;cam.target.copy(o.root.position);
-  SPOTS.forEach(s=>{s.ring.visible=true;s.ring.material.color=C('#ffffff');s.ring.material.opacity=.55;s.checked=false;s.dim=false;});
+  spotsIn(G.area).forEach(s=>{s.ring.visible=true;s.ring.material.color=C('#ffffff');s.ring.material.opacity=.55;s.checked=false;s.dim=false;});
   G.mode='ready';
   ui.innerHTML=`<div class="screen veil pad"><div class="wrap"><div class="center" style="justify-content:flex-end">
     <span class="tag seeker">${esc(G.players[k].name)} ${vb(k,'يبحث','تبحث')}</span>
@@ -822,11 +900,14 @@ function search(){
   const total=G.duration*1000;G.endAt=performance.now()+total;G.startAt=performance.now();G.total=total;G.lastSec=null;
   setHud(true);$('timerBox').hidden=false;$('triesBox').hidden=false;$('tries').textContent='0';$('radarBtn').hidden=false;$('radarBtn').disabled=false;
   G.nextGiggle=performance.now()+12000;G.nextBeat=0;
-  $('radarBtn').onclick=()=>{if(G.mode!=='search')return;$('radarBtn').disabled=true;G.endAt-=10000;const h=SPOTS.find(x=>x.id===G.hide),house=inHouse(h.x,h.z);
+  $('radarBtn').onclick=()=>{if(G.mode!=='search')return;$('radarBtn').disabled=true;G.endAt-=10000;const h=SPOTS.find(x=>x.id===G.hide);
     sound([880,1320,880,1320],.08,'sine',.07);
-    const side=house?(h.x<0?(h.z<-9?'غرفة النوم':'الصالون'):(h.z<-9?'الحمّام':'المطبخ')):(h.z<-4?'الجهة الخلفية من الحديقة':'الجهة الأمامية من الحديقة');
-    showToast(`الرادار: ${house?'في البيت':'في الحديقة'} · ${side}`,'warm',4500);
-    SPOTS.forEach(sp=>{if(!sp.checked&&inHouse(sp.x,sp.z)!==house){sp.dim=true;}});};
+    let zone,side;
+    if(G.area==='forest'){zone='الغابة';side=(h.z<-44?'عمق الغابة':'طرف الغابة')+' · '+(h.x<0?'الجهة الغربية':'الجهة الشرقية');}
+    else{const house=inHouse(h.x,h.z);zone=house?'البيت':'الحديقة';
+      side=house?(h.x<0?(h.z<-9?'غرفة النوم':'الصالون'):(h.z<-9?'الحمّام':'المطبخ')):(h.z<-4?'الجهة الخلفية من الحديقة':'الجهة الأمامية من الحديقة');}
+    showToast(`الرادار: ${zone} · ${side}`,'warm',4500);
+    if(G.area!=='forest')spotsIn('yard').forEach(sp=>{if(!sp.checked&&inHouse(sp.x,sp.z)!==inHouse(h.x,h.z))sp.dim=true;});};
   $('roleline').innerHTML=`<span class="tag seeker">${esc(G.players[k].name)} ${vb(k,'يبحث','تبحث')}</span>`;
   showToast(G.hints?'التلميح يظهر بعد كل محاولة':'ابدأ البحث!','',2500);
   keepAwake(true);
