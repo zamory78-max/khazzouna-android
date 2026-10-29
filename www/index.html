@@ -207,11 +207,11 @@ async function keepAwake(on){try{if(on&&navigator.wakeLock&&!wake){wake=await na
 /* ============ Renderer ============ */
 const canvas=$('c');
 let renderer;
-try{renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});}
+try{renderer=new THREE.WebGLRenderer({canvas,antialias:false,powerPreference:'high-performance'});}
 catch(e){ui.innerHTML='<div class="screen solid pad"><div class="center"><h1>المتصفح لا يدعم ثلاثي الأبعاد</h1><p>افتح اللعبة في Chrome على الهاتف.</p></div></div>';throw e;}
-renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.75));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.2));
 renderer.outputEncoding=THREE.sRGBEncoding;
-renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFShadowMap;
 const C=h=>new THREE.Color(h).convertSRGBToLinear();
 const matCache={};
 const M=(hex,o={})=>{const k=hex+JSON.stringify(o);return matCache[k]||(matCache[k]=new THREE.MeshStandardMaterial(Object.assign({color:C(hex),roughness:.85,metalness:0},o)));};
@@ -232,7 +232,7 @@ addEventListener('resize',resize);resize();
 /* ============ Lights ============ */
 const hemi=new THREE.HemisphereLight(C('#ffe9cf'),C('#4f7a46'),.75);world.add(hemi);
 const sun=new THREE.DirectionalLight(C('#fff1d6'),1.25);
-sun.position.set(-18,30,14);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);
+sun.position.set(-18,30,14);sun.castShadow=true;sun.shadow.mapSize.set(512,512);
 Object.assign(sun.shadow.camera,{left:-28,right:28,top:28,bottom:-28,near:5,far:80});sun.shadow.bias=-.0008;
 world.add(sun);
 const LAMPS=[],BULBS=[];
@@ -425,9 +425,9 @@ const areaName=s=>inHouse(s.x,s.z)?'البيت':'الحديقة';
 
 /* ============ Characters ============ */
 const MODELS={
-  boy:{file:'Soldier.glb.txt',h:1.83,flip:true,names:{idle:'Idle',walk:'Walk',run:'Run'}},
-  girl:{file:'Michelle.glb.txt',h:1.66,borrow:true},
-  robot:{file:'Xbot.glb.txt',h:1.81,names:{idle:'idle',walk:'walk',run:'run'}}
+  boy:{file:'Soldier.glb',h:1.83,flip:true,names:{idle:'Idle',walk:'Walk',run:'Run'}},
+  girl:{file:'Michelle.glb',h:1.66,borrow:true},
+  robot:{file:'Xbot.glb',h:1.81,names:{idle:'idle',walk:'walk',run:'run'}}
 };
 const GLB={};let XCLIPS=null;
 const COLORS=['#ffffff','#ff7d6b','#ffc247','#7ccf8a','#5aa9e6','#b48cf2'];
@@ -601,7 +601,7 @@ async function loadAll(){
   showLoading();
   const keys=Object.keys(MODELS),prog={};
   const upd=()=>{const v=keys.reduce((a,k)=>a+(prog[k]||0),0)/keys.length;const b=$('lbar');if(b)b.style.width=(v*100)+'%';};
-  await Promise.all(keys.map(async k=>{const buf=await fetchBuf(MODELS[k].file,p=>{prog[k]=p*.95;upd();});GLB[k]=await parseGLB(b64(buf));prog[k]=1;upd();}));
+  await Promise.all(keys.map(async k=>{const buf=await fetchBuf(MODELS[k].file,p=>{prog[k]=p*.95;upd();});GLB[k]=await parseGLB(buf);prog[k]=1;upd();}));
   const xc=prepClips(GLB.robot.animations,false);XCLIPS={};
   ['idle','walk','run'].forEach(n=>{const c=xc.find(x=>x.name===n);if(c)XCLIPS[n]=retarget(GLB.robot.scene,c,GLB.girl.scene,MODELS.girl.h/MODELS.robot.h);});
   prepGirl();
@@ -655,12 +655,13 @@ function controlPlayer(ch,dt){
 }
 
 const ray=new THREE.Raycaster();
+const _fallbackPos=new THREE.Vector3(0,0,-4),_camTgt=new THREE.Vector3();
 function updateCamera(ch,dt,orbit){
-  const p=ch?ch.root.position:new THREE.Vector3(0,0,-4);
+  const p=ch?ch.root.position:_fallbackPos;
   const inside=ch&&inHouse(p.x,p.z);
   const tp=(orbit?.5:(inside?1.0:.42))+(orbit?0:(cam.pitchAdj||0)),td=orbit?9:(inside?6.4:5.4);
   cam.pitch+=(tp-cam.pitch)*Math.min(1,dt*4);cam.dist+=(td-cam.dist)*Math.min(1,dt*4);
-  const h=ch?ch.H*.62:1;const tgt=new THREE.Vector3(p.x,p.y+h,p.z);cam.target.lerp(tgt,Math.min(1,dt*10));
+  const h=ch?ch.H*.62:1;_camTgt.set(p.x,p.y+h,p.z);cam.target.lerp(_camTgt,Math.min(1,dt*10));
   const cp=Math.cos(cam.pitch);
   camera.position.set(cam.target.x+Math.sin(cam.yaw)*cp*cam.dist,cam.target.y+Math.sin(cam.pitch)*cam.dist,cam.target.z+Math.cos(cam.yaw)*cp*cam.dist);
   camera.lookAt(cam.target);
@@ -882,7 +883,7 @@ function loop(){
     if(G.preview){G.preview.mixer.update(dt);G.spinPause=Math.max(0,(G.spinPause||0)-dt);if(!G.spinPause)G.preview.root.rotation.y+=dt*.5;updateFollowers(G.preview);}
     renderer.render(studio,scam);return;}
   G.objs.forEach(o=>{if(!o)return;o.mixer.update(dt);updateFollowers(o);});
-  if(G.mode==='menu'){menuYaw+=dt*.08;cam.yaw=menuYaw;cam.pitch=.38;cam.dist=30;const t=new THREE.Vector3(0,1,-4);cam.target.copy(t);
+  if(G.mode==='menu'){menuYaw+=dt*.08;cam.yaw=menuYaw;cam.pitch=.38;cam.dist=30;cam.target.set(0,1,-4);
     camera.position.set(Math.sin(menuYaw)*30,13,-4+Math.cos(menuYaw)*30);camera.lookAt(0,1,-4);G.roof.forEach(r=>r.visible=true);
     FADERS.forEach(m=>m.material.opacity=1);renderer.render(world,camera);return;}
   if(G.mode==='found'||G.mode==='result'){cam.yaw+=dt*.25;const o=G.orbitObj;updateCamera(o,dt,true);renderer.render(world,camera);return;}
