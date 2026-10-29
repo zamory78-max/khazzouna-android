@@ -32,6 +32,11 @@ jobs:
       - name: Accept Android SDK licenses
         run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
+      - name: Use a fixed debug signing key (so updates install over old versions)
+        run: |
+          mkdir -p ~/.android
+          cp keystore/debug.keystore ~/.android/debug.keystore
+
       - name: Add Android platform (if missing)
         run: |
           if [ ! -d "android" ]; then
